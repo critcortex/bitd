@@ -5,17 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shared Data</title>
 <style>
-  /* ============ SETTINGS: edit these two lines ============ */
-  /* (Set in the script below: CSV_URL and PAGE_TITLE.)       */
-
   :root {
     --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
     --border: #e3e3df; --accent: #2f5bd3; --row-alt: #fafaf8; --hover: #eef2fc;
+    --accent-soft: #e6ecfb;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #161615; --surface: #1f1f1d; --text: #ececea; --muted: #9a9a94;
       --border: #33332f; --accent: #7d9cf0; --row-alt: #232321; --hover: #2a3042;
+      --accent-soft: #2a3042;
     }
   }
   * { box-sizing: border-box; }
@@ -25,14 +24,49 @@
   }
   .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 16px 48px; }
   h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing: -0.01em; }
-  .meta { color: var(--muted); font-size: 0.875rem; margin-bottom: 20px; }
-  .controls { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
-  input[type=search] {
-    flex: 1 1 260px; padding: 9px 12px; font: inherit; color: var(--text);
-    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-  }
-  input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  h2 { font-size: 1.15rem; margin: 0; }
+  .meta { color: var(--muted); font-size: 0.875rem; margin-bottom: 24px; }
+  section { margin-bottom: 32px; }
+  .section-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
   .count { color: var(--muted); font-size: 0.875rem; white-space: nowrap; }
+  .spacer { flex: 1; }
+
+  /* Stat tiles */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat .value { font-size: 1.8rem; font-weight: 650; line-height: 1.2; margin-top: 2px; overflow-wrap: anywhere; }
+
+  /* PC carousel */
+  .carousel-wrap { position: relative; }
+  .carousel {
+    display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory;
+    padding: 2px 2px 12px; scrollbar-width: thin;
+  }
+  .pc {
+    flex: 0 0 260px; scroll-snap-align: start;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .pc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+  .pc-name { font-weight: 650; font-size: 1.05rem; overflow-wrap: anywhere; }
+  .badge {
+    background: var(--accent-soft); color: var(--accent); border-radius: 999px;
+    padding: 2px 10px; font-size: 0.75rem; font-weight: 600; white-space: nowrap;
+  }
+  .pc dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 0.875rem; }
+  .pc dt { color: var(--muted); }
+  .pc dd { margin: 0; overflow-wrap: anywhere; }
+  .nav {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: 8px; width: 34px; height: 34px; font-size: 1rem; cursor: pointer;
+  }
+  .nav:hover { background: var(--hover); }
+
+  /* Scores table */
   .table-box {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
     overflow-x: auto;
@@ -54,33 +88,55 @@
   a { color: var(--accent); }
   .msg { padding: 24px; color: var(--muted); }
   .msg.error { color: #c0392b; }
+  .box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1 id="title">Shared Data</h1>
   <div class="meta" id="meta">Loading…</div>
-  <div class="controls">
-    <input type="search" id="search" placeholder="Search all columns…" aria-label="Search">
-    <span class="count" id="count"></span>
-  </div>
-  <div class="table-box"><div class="msg" id="status">Loading data…</div><table id="table" hidden></table></div>
+
+  <section>
+    <div class="stats" id="stats"><div class="msg">Loading crew…</div></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>PCs</h2><span class="count" id="pc-count"></span><span class="spacer"></span>
+      <button class="nav" id="pc-prev" aria-label="Previous">‹</button>
+      <button class="nav" id="pc-next" aria-label="Next">›</button>
+    </div>
+    <div class="carousel-wrap"><div class="carousel" id="pcs"><div class="msg">Loading PCs…</div></div></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Scores</h2><span class="count" id="score-count"></span></div>
+    <div class="table-box" id="scores"><div class="msg">Loading scores…</div></div>
+  </section>
 </div>
 
 <script>
   // ==================== SETTINGS ====================
-  // Paste your Google Sheet's "Publish to web" CSV link here.
-  const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRORn-r01dRCnbOSBs0wSqc1-btHxV6WSmiv74YJyIpOE6n2m1QGtFzHn6_QgqyES_eMFq4IcrPMn_2/pub?gid=994482381&single=true&output=csv";
-  const CSV_URL_PCS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRORn-r01dRCnbOSBs0wSqc1-btHxV6WSmiv74YJyIpOE6n2m1QGtFzHn6_QgqyES_eMFq4IcrPMn_2/pub?gid=1454286846&single=true&output=csv";
-  // Heading shown at the top of the page.
+  const BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRORn-r01dRCnbOSBs0wSqc1-btHxV6WSmiv74YJyIpOE6n2m1QGtFzHn6_QgqyES_eMFq4IcrPMn_2/pub";
+  const CSV_URL_SCORES = BASE + "?gid=994482381&single=true&output=csv";
+  const CSV_URL_PCS    = BASE + "?gid=1454286846&single=true&output=csv";
+  const CSV_URL_CREWS  = BASE + "?gid=1968991231&single=true&output=csv";
+
   const PAGE_TITLE = "The Boilermen";
+  const CREW_NAME = "Boilermen";     // rows are kept where the Crew column equals this
+  const CREW_COLUMN = "Crew";        // column used for filtering (case-insensitive)
+
+  // Column headers (case-insensitive) used in each sheet.
+  const STAT_COLUMNS = ["Tier", "Rep", "Heat", "Stash"];            // Crews sheet -> tiles
+  const PC_NAME_COLUMNS = ["Name", "PC", "Character", "Alias"];     // first one found is the tile title
+  const PC_STATUS_COLUMN = "Status";
+  // PCs are sorted in this order; any other status goes after these, alphabetically.
+  const STATUS_ORDER = ["Active", "Injured", "Captured", "Retired", "Dead"];
+  const SCORE_DATE_COLUMN = "Date";                                 // Scores sorted newest first
   // ==================================================
 
   document.title = PAGE_TITLE;
   document.getElementById("title").textContent = PAGE_TITLE;
-
-  let headers = [], rows = [], numericCols = new Set();
-  let sortCol = -1, sortDir = 1;
 
   // CSV parser that handles quoted fields, commas and line breaks inside quotes.
   function parseCSV(text) {
@@ -106,7 +162,6 @@
     const s = String(v).replace(/[£$€,%\s]/g, "");
     return s !== "" && !isNaN(s) ? parseFloat(s) : null;
   };
-
   function escapeHTML(s) {
     return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
@@ -114,69 +169,159 @@
     const safe = escapeHTML(v);
     return /^https?:\/\/\S+$/.test(v) ? `<a href="${safe}" target="_blank" rel="noopener">${safe}</a>` : safe;
   }
+  const norm = s => String(s ?? "").trim().toLowerCase();
 
-  function render() {
-    const q = document.getElementById("search").value.trim().toLowerCase();
-    let view = q ? rows.filter(r => r.some(v => v.toLowerCase().includes(q))) : rows.slice();
-    if (sortCol >= 0) {
-      const isNum = numericCols.has(sortCol);
-      view.sort((a, b) => {
-        const x = a[sortCol] ?? "", y = b[sortCol] ?? "";
-        if (isNum) return ((toNumber(x) ?? -Infinity) - (toNumber(y) ?? -Infinity)) * sortDir;
-        return x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" }) * sortDir;
-      });
+  // Parse dates as dd/mm/yyyy (UK) first, then fall back to anything Date understands.
+  function parseDate(v) {
+    const s = String(v ?? "").trim();
+    if (!s) return null;
+    const m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})(?:[ T](\d{1,2}):(\d{2}))?/);
+    if (m) {
+      let y = +m[3]; if (y < 100) y += 2000;
+      return new Date(y, +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)).getTime();
     }
-    const thead = "<thead><tr>" + headers.map((h, i) => {
-      const arrow = i === sortCol ? (sortDir === 1 ? "▲" : "▼") : "";
-      return `<th data-col="${i}" class="${numericCols.has(i) ? "num" : ""}">${escapeHTML(h)} <span class="arrow">${arrow}</span></th>`;
-    }).join("") + "</tr></thead>";
-    const tbody = "<tbody>" + view.map(r => "<tr>" + headers.map((_, i) =>
-      `<td class="${numericCols.has(i) ? "num" : ""}">${renderCell(r[i] ?? "")}</td>`).join("") + "</tr>").join("") + "</tbody>";
-    const table = document.getElementById("table");
-    table.innerHTML = thead + tbody;
-    table.hidden = false;
-    document.getElementById("status").hidden = true;
-    document.getElementById("count").textContent =
-      q ? `${view.length} of ${rows.length} rows` : `${rows.length} rows`;
+    const t = Date.parse(s);
+    return isNaN(t) ? null : t;
   }
 
-  document.getElementById("table").addEventListener("click", e => {
-    const th = e.target.closest("th"); if (!th) return;
-    const col = +th.dataset.col;
-    sortDir = col === sortCol ? -sortDir : 1; sortCol = col; render();
-  });
-  document.getElementById("search").addEventListener("input", render);
-
-  async function load() {
-    const status = document.getElementById("status");
-    if (!CSV_URL || CSV_URL.startsWith("PASTE_")) {
-      status.className = "msg error";
-      status.textContent = "No data source set. Edit index.html and paste your published CSV link into CSV_URL.";
-      document.getElementById("meta").textContent = "";
-      return;
-    }
+  // Fetch a CSV and return { headers, rows } with rows filtered to the crew.
+  async function loadCSV(url, label) {
     try {
-      const sep = CSV_URL.includes("?") ? "&" : "?";
-      const res = await fetch(CSV_URL + sep + "_=" + Date.now());
+      const sep = url.includes("?") ? "&" : "?";
+      const res = await fetch(url + sep + "_=" + Date.now());
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = parseCSV(await res.text());
-      if (!data.length) throw new Error("The sheet is empty.");
-      headers = data[0].map(h => h.trim());
-      rows = data.slice(1).map(r => r.map(v => v.trim()));
-      numericCols = new Set(headers.map((_, i) => i).filter(i => {
-        const vals = rows.map(r => r[i]).filter(v => v);
-        return vals.length && vals.every(v => toNumber(v) !== null);
-      }));
-      document.getElementById("meta").textContent =
-        "Loaded " + new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-      render();
+      if (!data.length) throw new Error("the sheet is empty");
+      const headers = data[0].map(h => h.trim());
+      const rows = data.slice(1).map(r => headers.map((_, i) => (r[i] ?? "").trim()));
+      const crewIdx = headers.findIndex(h => norm(h) === norm(CREW_COLUMN));
+      return { headers, rows, crewIdx };
     } catch (err) {
-      status.className = "msg error";
-      status.textContent = "Could not load the data (" + err.message + "). Check that the sheet is published to the web as CSV.";
-      document.getElementById("meta").textContent = "";
+      return { error: `Could not load ${label} (${err.message}). Check that the sheet is published to the web as CSV.` };
     }
   }
-  load();
+  const forCrew = d => d.rows.filter(r => norm(r[d.crewIdx]) === norm(CREW_NAME));
+  const colIdx = (headers, name) => headers.findIndex(h => norm(h) === norm(name));
+  function showError(el, msg) { el.innerHTML = `<div class="msg error">${escapeHTML(msg)}</div>`; }
+
+  // ---------- Crew stat tiles ----------
+  function renderCrew(d) {
+    const el = document.getElementById("stats");
+    if (d.error) return showError(el, d.error);
+    // Crew name may sit in the Crew column, or in a Name column if there is no Crew column.
+    let idx = d.crewIdx >= 0 ? d.crewIdx : colIdx(d.headers, "Name");
+    const row = d.rows.find(r => norm(r[idx]) === norm(CREW_NAME));
+    if (!row) return showError(el, `No row for "${CREW_NAME}" found in the Crews sheet.`);
+    el.innerHTML = STAT_COLUMNS.map(name => {
+      const i = colIdx(d.headers, name);
+      const val = i >= 0 && row[i] !== "" ? row[i] : "—";
+      return `<div class="stat"><div class="label">${escapeHTML(name)}</div><div class="value">${escapeHTML(val)}</div></div>`;
+    }).join("");
+  }
+
+  // ---------- PC carousel ----------
+  function statusRank(s) {
+    const i = STATUS_ORDER.findIndex(x => norm(x) === norm(s));
+    return i >= 0 ? i : STATUS_ORDER.length;
+  }
+  function renderPCs(d) {
+    const el = document.getElementById("pcs");
+    if (d.error) return showError(el, d.error);
+    if (d.crewIdx < 0) return showError(el, `No "${CREW_COLUMN}" column found in the PCs sheet.`);
+    const rows = forCrew(d);
+    const statusIdx = colIdx(d.headers, PC_STATUS_COLUMN);
+    let nameIdx = -1;
+    for (const n of PC_NAME_COLUMNS) { nameIdx = colIdx(d.headers, n); if (nameIdx >= 0) break; }
+    if (nameIdx < 0) nameIdx = d.headers.findIndex((_, i) => i !== d.crewIdx && i !== statusIdx);
+
+    rows.sort((a, b) => {
+      if (statusIdx >= 0) {
+        const diff = statusRank(a[statusIdx]) - statusRank(b[statusIdx]);
+        if (diff) return diff;
+        const s = norm(a[statusIdx]).localeCompare(norm(b[statusIdx]));
+        if (s) return s;
+      }
+      return (a[nameIdx] ?? "").localeCompare(b[nameIdx] ?? "", undefined, { sensitivity: "base" });
+    });
+
+    document.getElementById("pc-count").textContent = `${rows.length} PC${rows.length === 1 ? "" : "s"}`;
+    if (!rows.length) { el.innerHTML = `<div class="msg">No PCs for ${escapeHTML(CREW_NAME)}.</div>`; return; }
+    el.innerHTML = rows.map(r => {
+      const details = d.headers.map((h, i) => i)
+        .filter(i => i !== d.crewIdx && i !== nameIdx && i !== statusIdx && r[i] !== "")
+        .map(i => `<dt>${escapeHTML(d.headers[i])}</dt><dd>${renderCell(r[i])}</dd>`).join("");
+      const status = statusIdx >= 0 && r[statusIdx] ? `<span class="badge">${escapeHTML(r[statusIdx])}</span>` : "";
+      return `<article class="pc"><div class="pc-head"><div class="pc-name">${escapeHTML(r[nameIdx] || "Unnamed")}</div>${status}</div><dl>${details}</dl></article>`;
+    }).join("");
+  }
+
+  // ---------- Scores table ----------
+  const scores = { headers: [], rows: [], cols: [], numericCols: new Set(), dateIdx: -1, sortCol: -1, sortDir: -1 };
+
+  function renderScores() {
+    const el = document.getElementById("scores");
+    const s = scores;
+    let view = s.rows.slice();
+    if (s.sortCol >= 0) {
+      const isNum = s.numericCols.has(s.sortCol), isDate = s.sortCol === s.dateIdx;
+      view.sort((a, b) => {
+        const x = a.cells[s.sortCol] ?? "", y = b.cells[s.sortCol] ?? "";
+        let diff;
+        if (isDate) diff = (parseDate(x) ?? -Infinity) - (parseDate(y) ?? -Infinity);
+        else if (isNum) diff = (toNumber(x) ?? -Infinity) - (toNumber(y) ?? -Infinity);
+        else diff = x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" });
+        // Ties (e.g. same date) keep newest sheet row first when sorting by date.
+        return diff * s.sortDir || (isDate ? (b.order - a.order) * (s.sortDir === -1 ? 1 : -1) : 0);
+      });
+    } else if (s.sortDir === -1) view.reverse(); // no date column: assume sheet is oldest-first
+    const thead = "<thead><tr>" + s.cols.map(i => {
+      const arrow = i === s.sortCol ? (s.sortDir === 1 ? "▲" : "▼") : "";
+      return `<th data-col="${i}" class="${s.numericCols.has(i) ? "num" : ""}">${escapeHTML(s.headers[i])} <span class="arrow">${arrow}</span></th>`;
+    }).join("") + "</tr></thead>";
+    const tbody = "<tbody>" + view.map(r => "<tr>" + s.cols.map(i =>
+      `<td class="${s.numericCols.has(i) ? "num" : ""}">${renderCell(r.cells[i] ?? "")}</td>`).join("") + "</tr>").join("") + "</tbody>";
+    el.innerHTML = s.rows.length ? `<table>${thead}${tbody}</table>` : `<div class="msg">No scores for ${escapeHTML(CREW_NAME)}.</div>`;
+    document.getElementById("score-count").textContent = `${s.rows.length} score${s.rows.length === 1 ? "" : "s"}`;
+  }
+
+  function initScores(d) {
+    const el = document.getElementById("scores");
+    if (d.error) return showError(el, d.error);
+    if (d.crewIdx < 0) return showError(el, `No "${CREW_COLUMN}" column found in the Scores sheet.`);
+    const s = scores;
+    s.headers = d.headers;
+    s.rows = forCrew(d).map((cells, order) => ({ cells, order }));
+    s.cols = d.headers.map((_, i) => i).filter(i => i !== d.crewIdx);
+    s.dateIdx = colIdx(d.headers, SCORE_DATE_COLUMN);
+    s.numericCols = new Set(s.cols.filter(i => {
+      const vals = s.rows.map(r => r.cells[i]).filter(v => v);
+      return i !== s.dateIdx && vals.length && vals.every(v => toNumber(v) !== null);
+    }));
+    s.sortCol = s.dateIdx; s.sortDir = -1; // newest first
+    renderScores();
+  }
+
+  document.getElementById("scores").addEventListener("click", e => {
+    const th = e.target.closest("th"); if (!th) return;
+    const col = +th.dataset.col;
+    scores.sortDir = col === scores.sortCol ? -scores.sortDir : 1; scores.sortCol = col; renderScores();
+  });
+
+  // ---------- Carousel buttons ----------
+  const carousel = document.getElementById("pcs");
+  const scrollBy = dir => carousel.scrollBy({ left: dir * Math.max(carousel.clientWidth * 0.8, 260), behavior: "smooth" });
+  document.getElementById("pc-prev").addEventListener("click", () => scrollBy(-1));
+  document.getElementById("pc-next").addEventListener("click", () => scrollBy(1));
+
+  // ---------- Load everything ----------
+  Promise.all([
+    loadCSV(CSV_URL_CREWS, "Crews").then(renderCrew),
+    loadCSV(CSV_URL_PCS, "PCs").then(renderPCs),
+    loadCSV(CSV_URL_SCORES, "Scores").then(initScores),
+  ]).then(() => {
+    document.getElementById("meta").textContent =
+      "Loaded " + new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  });
 </script>
 </body>
 </html>
