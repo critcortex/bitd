@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared Data</title>
+<style>
+  /* ============ SETTINGS: edit these two lines ============ */
+  /* (Set in the script below: CSV_URL and PAGE_TITLE.)       */
+
+  :root {
+    --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
+    --border: #e3e3df; --accent: #2f5bd3; --row-alt: #fafaf8; --hover: #eef2fc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615; --surface: #1f1f1d; --text: #ececea; --muted: #9a9a94;
+      --border: #33332f; --accent: #7d9cf0; --row-alt: #232321; --hover: #2a3042;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .meta { color: var(--muted); font-size: 0.875rem; margin-bottom: 20px; }
+  .controls { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  input[type=search] {
+    flex: 1 1 260px; padding: 9px 12px; font: inherit; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  }
+  input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .count { color: var(--muted); font-size: 0.875rem; white-space: nowrap; }
+  .table-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    overflow-x: auto;
+  }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th {
+    position: sticky; top: 0; background: var(--surface); font-weight: 600;
+    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted);
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  th:hover { color: var(--text); }
+  th .arrow { display: inline-block; width: 1em; color: var(--accent); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  th.num { text-align: right; }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  tbody tr:hover { background: var(--hover); }
+  tbody tr:last-child td { border-bottom: none; }
+  a { color: var(--accent); }
+  .msg { padding: 24px; color: var(--muted); }
+  .msg.error { color: #c0392b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">Shared Data</h1>
+  <div class="meta" id="meta">Loading…</div>
+  <div class="controls">
+    <input type="search" id="search" placeholder="Search all columns…" aria-label="Search">
+    <span class="count" id="count"></span>
+  </div>
+  <div class="table-box"><div class="msg" id="status">Loading data…</div><table id="table" hidden></table></div>
+</div>
+
+<script>
+  // ==================== SETTINGS ====================
+  // Paste your Google Sheet's "Publish to web" CSV link here.
+  const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRORn-r01dRCnbOSBs0wSqc1-btHxV6WSmiv74YJyIpOE6n2m1QGtFzHn6_QgqyES_eMFq4IcrPMn_2/pub?output=csv";
+  // Heading shown at the top of the page.
+  const PAGE_TITLE = "Shared Data";
+  // ==================================================
+
+  document.title = PAGE_TITLE;
+  document.getElementById("title").textContent = PAGE_TITLE;
+
+  let headers = [], rows = [], numericCols = new Set();
+  let sortCol = -1, sortDir = 1;
+
+  // CSV parser that handles quoted fields, commas and line breaks inside quotes.
+  function parseCSV(text) {
+    const out = []; let row = [], field = "", inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false;
+        } else field += c;
+      } else if (c === '"') inQuotes = true;
+      else if (c === ",") { row.push(field); field = ""; }
+      else if (c === "\n" || c === "\r") {
+        if (c === "\r" && text[i + 1] === "\n") i++;
+        row.push(field); out.push(row); row = []; field = "";
+      } else field += c;
+    }
+    if (field !== "" || row.length) { row.push(field); out.push(row); }
+    return out.filter(r => r.some(v => v.trim() !== ""));
+  }
+
+  const toNumber = v => {
+    const s = String(v).replace(/[£$€,%\s]/g, "");
+    return s !== "" && !isNaN(s) ? parseFloat(s) : null;
+  };
+
+  function escapeHTML(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function renderCell(v) {
+    const safe = escapeHTML(v);
+    return /^https?:\/\/\S+$/.test(v) ? `<a href="${safe}" target="_blank" rel="noopener">${safe}</a>` : safe;
+  }
+
+  function render() {
+    const q = document.getElementById("search").value.trim().toLowerCase();
+    let view = q ? rows.filter(r => r.some(v => v.toLowerCase().includes(q))) : rows.slice();
+    if (sortCol >= 0) {
+      const isNum = numericCols.has(sortCol);
+      view.sort((a, b) => {
+        const x = a[sortCol] ?? "", y = b[sortCol] ?? "";
+        if (isNum) return ((toNumber(x) ?? -Infinity) - (toNumber(y) ?? -Infinity)) * sortDir;
+        return x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" }) * sortDir;
+      });
+    }
+    const thead = "<thead><tr>" + headers.map((h, i) => {
+      const arrow = i === sortCol ? (sortDir === 1 ? "▲" : "▼") : "";
+      return `<th data-col="${i}" class="${numericCols.has(i) ? "num" : ""}">${escapeHTML(h)} <span class="arrow">${arrow}</span></th>`;
+    }).join("") + "</tr></thead>";
+    const tbody = "<tbody>" + view.map(r => "<tr>" + headers.map((_, i) =>
+      `<td class="${numericCols.has(i) ? "num" : ""}">${renderCell(r[i] ?? "")}</td>`).join("") + "</tr>").join("") + "</tbody>";
+    const table = document.getElementById("table");
+    table.innerHTML = thead + tbody;
+    table.hidden = false;
+    document.getElementById("status").hidden = true;
+    document.getElementById("count").textContent =
+      q ? `${view.length} of ${rows.length} rows` : `${rows.length} rows`;
+  }
+
+  document.getElementById("table").addEventListener("click", e => {
+    const th = e.target.closest("th"); if (!th) return;
+    const col = +th.dataset.col;
+    sortDir = col === sortCol ? -sortDir : 1; sortCol = col; render();
+  });
+  document.getElementById("search").addEventListener("input", render);
+
+  async function load() {
+    const status = document.getElementById("status");
+    if (!CSV_URL || CSV_URL.startsWith("PASTE_")) {
+      status.className = "msg error";
+      status.textContent = "No data source set. Edit index.html and paste your published CSV link into CSV_URL.";
+      document.getElementById("meta").textContent = "";
+      return;
+    }
+    try {
+      const sep = CSV_URL.includes("?") ? "&" : "?";
+      const res = await fetch(CSV_URL + sep + "_=" + Date.now());
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = parseCSV(await res.text());
+      if (!data.length) throw new Error("The sheet is empty.");
+      headers = data[0].map(h => h.trim());
+      rows = data.slice(1).map(r => r.map(v => v.trim()));
+      numericCols = new Set(headers.map((_, i) => i).filter(i => {
+        const vals = rows.map(r => r[i]).filter(v => v);
+        return vals.length && vals.every(v => toNumber(v) !== null);
+      }));
+      document.getElementById("meta").textContent =
+        "Loaded " + new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+      render();
+    } catch (err) {
+      status.className = "msg error";
+      status.textContent = "Could not load the data (" + err.message + "). Check that the sheet is published to the web as CSV.";
+      document.getElementById("meta").textContent = "";
+    }
+  }
+  load();
+</script>
+</body>
+</html>
