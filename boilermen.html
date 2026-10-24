@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
 <title>Shared Data</title>
 <style>
   :root {
@@ -17,10 +20,21 @@
       --accent-soft: #2a3042;
     }
   }
+ .im-fell-english-regular {
+    font-family: "IM Fell English", serif;
+    font-weight: 400;
+    font-style: normal;
+  }
+
+  .im-fell-english-regular-italic {
+    font-family: "IM Fell English", serif;
+    font-weight: 400;
+    font-style: italic;
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 15px/1.5 "IM Fell English", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 16px 48px; }
   h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing: -0.01em; }
@@ -131,7 +145,7 @@
   const PC_NAME_COLUMNS = ["Name", "PC", "Character", "Alias"];     // first one found is the tile title
   const PC_STATUS_COLUMN = "Status";
   // PCs are sorted in this order; any other status goes after these, alphabetically.
-  const STATUS_ORDER = ["Active", "Injured", "Captured", "Retired", "Dead"];
+  const STATUS_ORDER = ["Active", "MIA", "Incarcerated", "Retired", "Dead"];
   const SCORE_DATE_COLUMN = "Date";                                 // Scores sorted newest first
   // ==================================================
 
@@ -318,10 +332,7 @@
     loadCSV(CSV_URL_CREWS, "Crews").then(renderCrew),
     loadCSV(CSV_URL_PCS, "PCs").then(renderPCs),
     loadCSV(CSV_URL_SCORES, "Scores").then(initScores),
-  ]).then(() => {
-    document.getElementById("meta").textContent =
-      "Loaded " + new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-  });
+  ]);
 </script>
 </body>
 </html>
