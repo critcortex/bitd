@@ -99,6 +99,11 @@
   tbody tr:nth-child(even) { background: var(--row-alt); }
   tbody tr:hover { background: var(--hover); }
   tbody tr:last-child td { border-bottom: none; }
+  /* Score table styling */
+  table.fixed { table-layout: fixed; min-width: 700px; }
+  table.fixed th { white-space: normal; }
+  table.fixed td { overflow-wrap: anywhere; }
+
   a { color: var(--accent); }
   .msg { padding: 24px; color: var(--muted); }
   .msg.error { color: #c0392b; }
@@ -108,7 +113,6 @@
 <body>
 <div class="wrap">
   <h1 id="title">Shared Data</h1>
-  <div class="meta" id="meta">Loading…</div>
 
   <section>
     <div class="stats" id="stats"><div class="msg">Loading crew…</div></div>
@@ -127,6 +131,9 @@
     <div class="section-head"><h2>Scores</h2><span class="count" id="score-count"></span></div>
     <div class="table-box" id="scores"><div class="msg">Loading scores…</div></div>
   </section>
+
+  <div class="meta" id="meta">Loading…</div>
+
 </div>
 
 <script>
@@ -145,8 +152,10 @@
   const PC_NAME_COLUMNS = ["Name", "PC", "Character", "Alias"];     // first one found is the tile title
   const PC_STATUS_COLUMN = "Status";
   // PCs are sorted in this order; any other status goes after these, alphabetically.
-  const STATUS_ORDER = ["Active", "MIA", "Incarcerated", "Retired", "Dead"];
+  const STATUS_ORDER = ["Active", "MIA", "Incarcerated", "Retired", "RIP"];
   const SCORE_DATE_COLUMN = "Date";                                 // Scores sorted newest first
+  const SCORE_NAME_COLUMNS = ["Date", "Name", "On the job", "Summary", "Payoff", "Rep gained", "Heat gained"];
+  const SCORE_COLUMN_WIDTHS = { "Summary": 3, "Date": 0.7, "Payoff": 0.5, "Rep gained": 0.5 , "Heat gained": 0.5 };
   // ==================================================
 
   document.title = PAGE_TITLE;
@@ -294,7 +303,16 @@
     }).join("") + "</tr></thead>";
     const tbody = "<tbody>" + view.map(r => "<tr>" + s.cols.map(i =>
       `<td class="${s.numericCols.has(i) ? "num" : ""}">${renderCell(r.cells[i] ?? "")}</td>`).join("") + "</tr>").join("") + "</tbody>";
-    el.innerHTML = s.rows.length ? `<table>${thead}${tbody}</table>` : `<div class="msg">No scores for ${escapeHTML(CREW_NAME)}.</div>`;
+
+    const weights = s.cols.map(i => {
+      const key = Object.keys(SCORE_COLUMN_WIDTHS).find(n => norm(n) === norm(s.headers[i]));
+      return key ? SCORE_COLUMN_WIDTHS[key] : 1;
+    });
+    const total = weights.reduce((a, b) => a + b, 0);
+    const colgroup = "<colgroup>" +
+      weights.map(w => `<col style="width:${(w / total * 100).toFixed(2)}%">`).join("") +
+      "</colgroup>";
+    el.innerHTML = s.rows.length ? `<table>${colgroup}${thead}${tbody}</table>` : `<div class="msg">No scores for ${escapeHTML(CREW_NAME)}.</div>`;
     document.getElementById("score-count").textContent = `${s.rows.length} score${s.rows.length === 1 ? "" : "s"}`;
   }
 
@@ -305,7 +323,9 @@
     const s = scores;
     s.headers = d.headers;
     s.rows = forCrew(d).map((cells, order) => ({ cells, order }));
-    s.cols = d.headers.map((_, i) => i).filter(i => i !== d.crewIdx);
+    s.cols = SCORE_NAME_COLUMNS.length
+      ? SCORE_NAME_COLUMNS.map(n => colIdx(d.headers, n)).filter(i => i >= 0)
+      : d.headers.map((_, i) => i).filter(i => i !== d.crewIdx);
     s.dateIdx = colIdx(d.headers, SCORE_DATE_COLUMN);
     s.numericCols = new Set(s.cols.filter(i => {
       const vals = s.rows.map(r => r.cells[i]).filter(v => v);
@@ -332,7 +352,10 @@
     loadCSV(CSV_URL_CREWS, "Crews").then(renderCrew),
     loadCSV(CSV_URL_PCS, "PCs").then(renderPCs),
     loadCSV(CSV_URL_SCORES, "Scores").then(initScores),
-  ]);
+  ]).then(() => {
+    document.getElementById("meta").textContent =
+      "Loaded " + new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  });
 </script>
 </body>
 </html>
